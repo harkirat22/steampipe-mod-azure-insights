@@ -1,7 +1,6 @@
 dashboard "network_application_gateway_detail" {
 
   title         = "Azure Network Application Gateway Detail"
-  documentation = file("./dashboards/network/docs/network_application_gateway_detail.md")
 
   tags = merge(local.network_common_tags, {
     type = "Detail"
