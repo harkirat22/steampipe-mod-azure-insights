@@ -902,3 +902,91 @@ edge "network_load_balancer_backend_address_pool_to_network_load_balancer" {
 
   param "network_load_balancer_backend_address_pool_ids" {}
 }
+
+edge "network_application_gateway_to_compute_virtual_machine_scale_set" {
+  title = "connects to"
+
+  sql = <<-EOQ
+    select
+      lower(g.id) as from_id,
+      lower(vmss.id) as to_id
+    from
+      azure_application_gateway as g,
+      jsonb_array_elements(backend_address_pools) as p,
+      jsonb_array_elements(p -> 'properties' -> 'backendAddresses') as addr,
+      azure_compute_virtual_machine_scale_set as vmss
+    where
+      addr ->> 'fqdn' like '%.virtualMachineScaleSets.%'
+      and lower(split_part(addr ->> 'fqdn', '.', 1)) = lower(vmss.name)
+      and lower(g.id) = any($1);
+  EOQ
+
+  param "network_application_gateway_ids" {}
+}
+
+edge "network_application_gateway_to_network_public_ip" {
+  title = "uses"
+
+  sql = <<-EOQ
+    select
+      distinct lower(g.id) as from_id,
+      lower(ip.id) as to_id
+    from
+      azure_application_gateway as g,
+      jsonb_array_elements(frontend_ip_configurations) as f
+      left join azure_public_ip as ip on lower(ip.id) = lower(f -> 'properties' -> 'publicIPAddress' ->> 'id')
+    where
+      lower(g.id) = any($1);
+  EOQ
+
+  param "network_application_gateway_ids" {}
+}
+
+edge "network_application_gateway_to_network_subnet" {
+  title = "uses"
+
+  sql = <<-EOQ
+    select
+      distinct lower(g.id) as from_id,
+      lower(s.id) as to_id
+    from
+      azure_application_gateway as g,
+      jsonb_array_elements(gateway_ip_configurations) as c
+      left join azure_subnet as s on lower(s.id) = lower(c -> 'properties' -> 'subnet' ->> 'id')
+    where
+      lower(g.id) = any($1);
+  EOQ
+
+  param "network_application_gateway_ids" {}
+}
+
+edge "network_application_gateway_to_compute_virtual_machine" {
+  title = "connects to"
+
+  sql = <<-EOQ
+    with backend_vms as (
+      select
+        g.id as gateway_id,
+        lower(vm ->> 'id') as vm_id
+      from
+        azure_application_gateway as g,
+        jsonb_array_elements(backend_address_pools) as p,
+        jsonb_array_elements(p -> 'properties' -> 'backendAddresses') as addr,
+        jsonb_array_elements_text(
+          case jsonb_typeof(addr -> 'virtualMachine')
+            when 'array' then (addr -> 'virtualMachine')
+            else jsonb_build_array(addr -> 'virtualMachine')
+          end
+        ) as vm
+      where
+        lower(g.id) = any($1)
+    )
+    select
+      distinct lower(gateway_id) as from_id,
+      vm_id as to_id
+    from
+      backend_vms;
+  EOQ
+
+  param "network_application_gateway_ids" {}
+}
