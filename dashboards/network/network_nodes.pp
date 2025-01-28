@@ -375,3 +375,52 @@ node "network_virtual_network_network_peering" {
 
   param "network_virtual_network_ids" {}
 }
+
+node "compute_virtual_machine" {
+  category = category.compute_virtual_machine
+
+  sql = <<-EOQ
+    select
+      lower(id) as id,
+      title as title,
+      jsonb_build_object(
+        'Name', name,
+        'ID', lower(id),
+        'VM Size', size,
+        'OS Type', os_type,
+        'Power State', power_state,
+        'Region', region,
+        'Resource Group', resource_group,
+        'Subscription ID', subscription_id
+      ) as properties
+    from
+      azure_compute_virtual_machine
+      join unnest($1::text[]) as i on lower(id) = i and subscription_id = split_part(i, '/', 3);
+  EOQ
+
+  param "compute_virtual_machine_ids" {}
+}
+
+node "compute_virtual_machine_scale_set" {
+  category = category.compute_virtual_machine_scale_set
+
+  sql = <<-EOQ
+    select
+      lower(id) as id,
+      title as title,
+      jsonb_build_object(
+        'Name', name,
+        'ID', lower(id),
+        'SKU Name', sku_name,
+        'Capacity', sku_capacity,
+        'Region', region,
+        'Resource Group', resource_group,
+        'Subscription ID', subscription_id
+      ) as properties
+    from
+      azure_compute_virtual_machine_scale_set
+      join unnest($1::text[]) as i on lower(id) = i and subscription_id = split_part(i, '/', 3);
+  EOQ
+
+  param "compute_virtual_machine_scale_set_ids" {}
+}
