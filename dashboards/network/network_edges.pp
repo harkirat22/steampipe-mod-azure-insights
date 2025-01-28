@@ -959,34 +959,3 @@ edge "network_application_gateway_to_network_subnet" {
 
   param "network_application_gateway_ids" {}
 }
-
-edge "network_application_gateway_to_compute_virtual_machine" {
-  title = "connects to"
-
-  sql = <<-EOQ
-    with backend_vms as (
-      select
-        g.id as gateway_id,
-        lower(vm ->> 'id') as vm_id
-      from
-        azure_application_gateway as g,
-        jsonb_array_elements(backend_address_pools) as p,
-        jsonb_array_elements(p -> 'properties' -> 'backendAddresses') as addr,
-        jsonb_array_elements_text(
-          case jsonb_typeof(addr -> 'virtualMachine')
-            when 'array' then (addr -> 'virtualMachine')
-            else jsonb_build_array(addr -> 'virtualMachine')
-          end
-        ) as vm
-      where
-        lower(g.id) = any($1)
-    )
-    select
-      distinct lower(gateway_id) as from_id,
-      vm_id as to_id
-    from
-      backend_vms;
-  EOQ
-
-  param "network_application_gateway_ids" {}
-}
