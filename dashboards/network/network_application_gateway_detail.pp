@@ -83,14 +83,14 @@ dashboard "network_application_gateway_detail" {
       direction = "TD"
 
       node {
-        base = node.compute_virtual_machine
+        base = node.network_virtual_machine
         args = {
           compute_virtual_machine_ids = with.compute_virtual_machines_for_network_application_gateway.rows[*].vm_id
         }
       }
 
       node {
-        base = node.compute_virtual_machine_scale_set
+        base = node.network_virtual_machine_scale_set
         args = {
           compute_virtual_machine_scale_set_ids = with.compute_virtual_machine_scale_sets_for_network_application_gateway.rows[*].vmss_id
         }
@@ -360,17 +360,26 @@ query "compute_virtual_machines_for_network_application_gateway" {
 
 query "compute_virtual_machine_scale_sets_for_network_application_gateway" {
   sql = <<-EOQ
+    with application_gateway_backend_address_pool as (
+      select
+        lower(b ->> 'id') as backend_address_pool_id
+      from
+          azure_compute_virtual_machine_scale_set as s,
+          jsonb_array_elements(virtual_machine_network_profile -> 'networkInterfaceConfigurations' ) as p,
+          jsonb_array_elements(p -> 'properties' -> 'ipConfigurations' ) as c,
+          jsonb_array_elements(c -> 'properties' -> 'applicationGatewayBackendAddressPools' ) as b
+      where
+        lower(s.id) = $1
+        and s.subscription_id = split_part($1, '/', 3)
+    )
     select
-      distinct lower(vmss.id) as vmss_id
+      lower(g.id) as application_gateway_id
     from
       azure_application_gateway as g,
-      jsonb_array_elements(backend_address_pools) as p,
-      jsonb_array_elements(p -> 'properties' -> 'backendAddresses') as addr,
-      azure_compute_virtual_machine_scale_set as vmss
+      jsonb_array_elements(backend_address_pools) as p
+      left join application_gateway_backend_address_pool as pool on lower(pool.backend_address_pool_id) = lower(p ->> 'id')
     where
-      lower(g.id) = lower($1)
-      and addr ->> 'fqdn' like '%.virtualMachineScaleSets.%'
-      and lower(split_part(addr ->> 'fqdn', '.', 1)) = lower(vmss.name);
+      pool.backend_address_pool_id is not null
   EOQ
 }
 

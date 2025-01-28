@@ -376,7 +376,7 @@ node "network_virtual_network_network_peering" {
   param "network_virtual_network_ids" {}
 }
 
-node "compute_virtual_machine" {
+node "network_virtual_machine" {
   category = category.compute_virtual_machine
 
   sql = <<-EOQ
@@ -401,7 +401,7 @@ node "compute_virtual_machine" {
   param "compute_virtual_machine_ids" {}
 }
 
-node "compute_virtual_machine_scale_set" {
+node "network_virtual_machine_scale_set" {
   category = category.compute_virtual_machine_scale_set
 
   sql = <<-EOQ
