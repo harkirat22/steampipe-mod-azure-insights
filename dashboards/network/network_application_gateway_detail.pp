@@ -83,16 +83,16 @@ dashboard "network_application_gateway_detail" {
       direction = "TD"
 
       node {
-        base = node.network_virtual_machine
+        base = node.compute_virtual_machine
         args = {
-          compute_virtual_machine_ids = with.compute_virtual_machines_for_network_application_gateway.rows[*].vm_id
+          compute_virtual_machine_ids = with.network_application_gateways_for_compute_virtual_machine.rows[*].vm_id
         }
       }
 
       node {
-        base = node.network_virtual_machine_scale_set
+        base = node.compute_virtual_machine_scale_set
         args = {
-          compute_virtual_machine_scale_set_ids = with.compute_virtual_machine_scale_sets_for_network_application_gateway.rows[*].vmss_id
+          compute_virtual_machine_scale_set_ids = with.network_application_gateways_for_compute_virtual_machine_scale_set.rows[*].vmss_id
         }
       }
 
@@ -324,64 +324,6 @@ query "network_application_gateway_ssl_cert_count" {
 }
 
 # With Queries
-
-query "compute_virtual_machines_for_network_application_gateway" {
-  sql = <<-EOQ
-    with network_interface as (
-      select
-        vm.id as vm_id,
-        nic.id,
-        nic.ip_configurations as ip_configurations
-      from
-        azure_compute_virtual_machine as vm,
-        jsonb_array_elements(network_interfaces) as n
-        left join azure_network_interface as nic on nic.id = n ->> 'id'
-    ),
-    vm_application_gateway_backend_address_pool as (
-      select
-        vm_id,
-        p ->> 'id' as id
-      from
-        network_interface,
-        jsonb_array_elements(ip_configurations) as i,
-        jsonb_array_elements(i -> 'properties' -> 'applicationGatewayBackendAddressPools') as p
-    )
-    select
-      distinct vm_id
-    from
-      azure_application_gateway as g,
-      jsonb_array_elements(backend_address_pools) as p,
-      vm_application_gateway_backend_address_pool as pool
-    where
-      lower(g.id) = lower($1)
-      and lower(p ->> 'id') = lower(pool.id);
-  EOQ
-}
-
-query "compute_virtual_machine_scale_sets_for_network_application_gateway" {
-  sql = <<-EOQ
-    with application_gateway_backend_address_pool as (
-      select
-        lower(b ->> 'id') as backend_address_pool_id
-      from
-          azure_compute_virtual_machine_scale_set as s,
-          jsonb_array_elements(virtual_machine_network_profile -> 'networkInterfaceConfigurations' ) as p,
-          jsonb_array_elements(p -> 'properties' -> 'ipConfigurations' ) as c,
-          jsonb_array_elements(c -> 'properties' -> 'applicationGatewayBackendAddressPools' ) as b
-      where
-        lower(s.id) = $1
-        and s.subscription_id = split_part($1, '/', 3)
-    )
-    select
-      lower(g.id) as application_gateway_id
-    from
-      azure_application_gateway as g,
-      jsonb_array_elements(backend_address_pools) as p
-      left join application_gateway_backend_address_pool as pool on lower(pool.backend_address_pool_id) = lower(p ->> 'id')
-    where
-      pool.backend_address_pool_id is not null
-  EOQ
-}
 
 query "network_public_ips_for_network_application_gateway" {
   sql = <<-EOQ
