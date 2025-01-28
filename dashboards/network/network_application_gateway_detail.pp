@@ -327,48 +327,50 @@ query "network_application_gateway_ssl_cert_count" {
 
 query "compute_virtual_machines_for_network_application_gateway" {
   sql = <<-EOQ
-    with backend_vms as (
+    with network_interface as (
       select
-        lower(vm ->> 'id') as vm_id
+        vm.id as vm_id,
+        nic.id,
+        nic.ip_configurations as ip_configurations
       from
-        azure_application_gateway,
-        jsonb_array_elements(backend_address_pools) as p,
-        jsonb_array_elements(p -> 'properties' -> 'backendAddresses') as addr,
-        jsonb_array_elements_text(
-          case jsonb_typeof(addr -> 'virtualMachine')
-            when 'array' then (addr -> 'virtualMachine')
-            else jsonb_build_array(addr -> 'virtualMachine')
-          end
-        ) as vm
-      where
-        lower(id) = $1
-        and subscription_id = split_part($1, '/', 3)
+        azure_compute_virtual_machine as vm,
+        jsonb_array_elements(network_interfaces) as n
+        left join azure_network_interface as nic on nic.id = n ->> 'id'
+    ),
+    vm_application_gateway_backend_address_pool as (
+      select
+        vm_id,
+        p ->> 'id' as id
+      from
+        network_interface,
+        jsonb_array_elements(ip_configurations) as i,
+        jsonb_array_elements(i -> 'properties' -> 'applicationGatewayBackendAddressPools') as p
     )
     select
       distinct vm_id
     from
-      backend_vms;
+      azure_application_gateway as g,
+      jsonb_array_elements(backend_address_pools) as p,
+      vm_application_gateway_backend_address_pool as pool
+    where
+      lower(g.id) = lower($1)
+      and lower(p ->> 'id') = lower(pool.id);
   EOQ
 }
 
 query "compute_virtual_machine_scale_sets_for_network_application_gateway" {
   sql = <<-EOQ
-    with backend_vmss as (
-      select
-        lower(split_part(addr ->> 'fqdn', '.', 1)) as vmss_id
-      from
-        azure_application_gateway,
-        jsonb_array_elements(backend_address_pools) as p,
-        jsonb_array_elements(p -> 'properties' -> 'backendAddresses') as addr
-      where
-        lower(id) = $1
-        and subscription_id = split_part($1, '/', 3)
-        and addr ->> 'fqdn' like '%.virtualMachineScaleSets.%'
-    )
     select
-      distinct vmss_id
+      distinct lower(vmss.id) as vmss_id
     from
-      backend_vmss;
+      azure_application_gateway as g,
+      jsonb_array_elements(backend_address_pools) as p,
+      jsonb_array_elements(p -> 'properties' -> 'backendAddresses') as addr,
+      azure_compute_virtual_machine_scale_set as vmss
+    where
+      lower(g.id) = lower($1)
+      and addr ->> 'fqdn' like '%.virtualMachineScaleSets.%'
+      and lower(split_part(addr ->> 'fqdn', '.', 1)) = lower(vmss.name);
   EOQ
 }
 
